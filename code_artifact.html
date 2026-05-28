@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>線上測驗系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: sans-serif; }
+        .correct-ans { background-color: #d1fae5 !important; border-color: #10b981 !important; font-weight: bold; color: #065f46; }
+        .wrong-ans { background-color: #fee2e2 !important; border-color: #ef4444 !important; color: #b91c1c; }
+        /* 提升手機版單選框點擊區域與視覺大小 */
+        input[type="radio"] { transform: scale(1.2); }
+        @media (min-width: 768px) { input[type="radio"] { transform: scale(1.5); } }
+    </style>
+</head>
+<body class="text-gray-800 antialiased bg-white">
+
+<div class="max-w-4xl mx-auto px-4 md:px-8 pb-12">
+    
+    <!-- 固定於上方的標頭區塊：單行顯示總分與階段選單 -->
+    <div class="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b py-3 mb-6 flex flex-row justify-between items-center gap-2">
+        <div class="text-base md:text-xl font-bold text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg whitespace-nowrap shadow-sm">
+            總分：<span id="total-score-display" class="text-lg md:text-2xl text-red-600">0</span> / 100
+        </div>
+        <select id="stage-select" onchange="jumpToStage(this.value)" class="flex-1 min-w-0 max-w-[60%] md:max-w-xs bg-gray-50 border border-gray-300 text-gray-900 text-sm md:text-lg rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 font-semibold shadow-sm cursor-pointer truncate">
+            <!-- 選項將由 JavaScript 產生 -->
+        </select>
+    </div>
+
+    <!-- 測驗內容區塊 -->
+    <div id="quiz-container">
+        <!-- 題目將由 JavaScript 渲染產生 -->
+    </div>
+
+    <!-- 底部按鈕 -->
+    <div class="mt-8 border-t pt-6 flex justify-end gap-4">
+        <button id="submit-btn" onclick="checkAnswers()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg shadow transition-colors text-xl">
+            送出訂正
+        </button>
+        <button id="next-btn" onclick="nextStage()" class="hidden w-full md:w-auto bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-8 rounded-lg shadow transition-colors text-xl">
+            下一階段
+        </button>
+    </div>
+
+</div>
+
+<script>
+// 100題完整資料
+const quizDataString = `
+1|C|本校 7年級籃球投籃接力比賽每班比賽時間幾分鐘|20分鐘|15分鐘|10分鐘|5分鐘
+2|C|本校 7年級籃球投籃接力比賽，投完籃傳球交棒給下一位如掉球應由何人撿球傳給下一位同學|只能由投籃者自己撿 球傳|只能由下一棒自己撿球|班上任何一位同學皆可撿球傳|以上皆非
+3|A|籃球運球時，彎腰及屈曲關節的用意是|降低重心|行動迅速|便於運球|防止球被搶走
+4|C|籃球控球是指身體哪一部位對球的掌握與控制的熟練度？|口|頭|手|腳
+5|B|打籃球時，第一次運球結束後，再進行第二次運球，則會被判哪一種違例？|跳球|二次運球|球出界|帶球走步
+6|D|打籃球時，當持球者於靜止狀態下，雙腳移動，則會被判哪一種違例？|跳球|二次運球|球出界|帶球走步
+7|D|在臺灣，高中籃球聯賽的縮寫為|UBA|NBA|CBA|HBL
+8|D|籃球運球練習時要|彎腰|屈膝|重心降低|以上皆是
+9|C|籃球運動中，當要運球前進時，球的落點應該在身體的哪裡？|前方|後方|側前方|側後方
+10|B|國際籃球正式比賽場地大小為|長 30公尺，寬 15公尺|長 28公尺，寬 15公尺|長 28公尺，寬 14公尺|長 30 公尺，寬 16公尺
+11|D|下列關於籃球運球 的規定，何者正確？|當進攻者持球未被其他人碰觸時，自己不小心讓球掉到地上， 可以把球接住後再運球|接到球時可以先走兩步再運球|拿著球時先看看隊友在哪裡之後再傳球，不管幾秒後傳都 沒關係|拿到球必須要運球才能移動
+12|A|下列籃圈內的直徑大小，何者符合正式比賽的規定？|45|47|75|78 公分
+13|C|將籃球高舉，再使其落至地面，觀察球彈起之高度，是在檢查什麼？|球的材質|球是否是圓的|球是否灌足了氣|球的穩定性
+14|D|籃球運動中對球的速度與方向掌握與控制的熟練程度稱之為？|傳球|接球|盤球|控球
+15|A|下列關於籃球運球動作要領的敘述，何者正確？|運球時以手腕將球下壓|運球時以手掌將球下壓|運球時以大臂將球下壓|以上皆非
+16|D|打籃球時，手腕與手指的靈活性、柔軟性會表現在下列何種動作上？|傳、接球|運球|投籃|以上皆是
+17|B|田徑比賽蹲踞式起跑的口令有 a起跑出發（鳴槍） b預備 c各就各位。依序是：|abc|cba|acb|bca
+18|C|籃球比賽中，當持球者停球時，單腳（非軸心腳）可任意移動，若此時軸心腳再移動的動作則稱為|打手|二次運球|帶球走步|抄截
+19|B|排球運動是一種|個人|團體|不合作|利用他人 的運動
+20|B|排球比賽中，誰是主要負責將球傳到有利於隊員扣球位置的人？|攻擊手|舉球員|發球員|自由球員
+21|C|排球場上，主要是以何種模式來進行該項運動？|傳 、踢、扣|丟、傳、接|傳、接、扣|打、傳、接
+22|B|下列關於排球低手接球的敘述，何者正確？甲、雙手自然伸直夾緊。乙、雙腳自然開立與肩同寬並屈膝。丙、來球碰觸在 肘關節處。丁、重心前傾。|甲乙丙|甲乙丁|甲丙丁|乙丙丁
+23|D|排球低手傳球準備動作中，手臂要|只要彎曲就好|用力繃緊彎曲|自然放鬆彎曲|自然放鬆伸直
+24|C|排球低手傳球時正確的擊球位置為|拳頭|手腕關節處|前臂接近手腕處|手 掌
+25|B|低手傳球最佳擊球位置，應在大姆指往後延伸至腕關節上方約幾公分？|5 6公分|10 15公分|20 25公分|25 公分以上
+26|A|下列關於排球比賽的規定，何者不正確？|排球落到地上時繼續比賽|將球擊到對方場地且於界內碰地，我方得分|我方失誤，將球落在己方的地上，對方得分|將球擊到對方場地且壓線碰地，我方得分
+27|B|下列何者非排球運動中的術語？|扣球|短打|低手發球|舉球
+28|A|排 球低手傳球時，盡量以雙手接球的原因為何？|接球面積範圍大，也較穩定|規則上的限定|守備的範圍較大|手臂的承受力較小
+29|B|進行排球比賽前要如何培養默契？|研讀規則|多和隊友練習|多找人聊天|多看幾場比賽
+30|A|排球比賽中得分的利器指的是|扣球|傳球|接球|發球
+31|A|羽球發球中，強調球的飛行速度，擊球位置高於發高遠球，發球力量略低於發高遠球，手腕甩動速度最快的是發哪種球？|平擊球|高遠球|短球|搓球
+32|B|以國家隊為單位的世界女子羽球團體大賽名稱為|瓊斯盃|優霸盃|威廉盃|湯姆斯盃
+33|D|羽球發球動作主要是以下列哪個動作所組成的？|預備姿勢|擊球|隨勢揮拍|以上皆是
+34|B|下列羽球發球的規則中，何者錯誤？下列羽球發球的規則中，何者錯誤？|雙腳須同時著地雙腳須同時著地|上拋發球上拋發球|對角發球對角發球|擊球瞬間，球與地面距離不得超過擊球瞬間，球與地面距離不得超過 1.15 公尺。公尺。
+35|A|羽球規則規定，發球時羽球規則規定，發球時 (甲甲)擊球瞬間球不可高於擊球瞬間球不可高於1.15M (乙乙)拍面不得高於握把拍面不得高於握把 (丙丙)動作向前必須連續動作向前必須連續 (丁丁)雙腳須同雙腳須同 時時著地著地|甲乙丙丁甲乙丙丁|甲乙丙甲乙丙|乙丙丁乙丙丁|甲乙丁。甲乙丁。
+36|C|揮動羽球拍擊球時，球的遠近與速度主要是受到哪一個部位的加速來控制？揮動羽球拍擊球時，球的遠近與速度主要是受到哪一個部位的加速來控制？|手臂手臂|肩膀肩膀|手腕手腕|手掌。手掌。
+37|C|下列關於羽球的敘述，哪一項是錯誤的？下列關於羽球的敘述，哪一項是錯誤的？|湯姆斯爵士創立了世界男子團體大賽湯姆斯盃湯姆斯爵士創立了世界男子團體大賽湯姆斯盃(Thomas Cups)|尤伯女士尤伯女士 創立了女子團體賽尤伯盃創立了女子團體賽尤伯盃 (Uber Cups)|羽球飛行軌跡羽球飛行軌跡與圓形球體相同與圓形球體相同|羽球在空中的飛行是球頭朝前，羽毛在後。羽球在空中的飛行是球頭朝前，羽毛在後。
+38|D|身體質量指數簡稱為身體質量指數簡稱為|BNI|BIN|BIM|BMI
+39|B|下列哪一個不是「體適能檢測」項目？下列哪一個不是「體適能檢測」項目？|坐姿體前彎坐姿體前彎|敏捷性敏捷性|立定跳遠立定跳遠|仰臥捲腹。仰臥捲腹。
+40|A|下列哪個方法能簡易的判斷太瘦還是太胖？下列哪個方法能簡易的判斷太瘦還是太胖？|身體質量指數身體質量指數(BMI)|體重少於或超過體重少於或超過60公斤公斤|身體重量指數身體重量指數|身體體質指數。身體體質指數。
+41|D|下列何者為全身性的有氧運動？下列何者為全身性的有氧運動？|100公尺衝刺公尺衝刺|籃球的籃球的投籃投籃|靜坐靜坐|慢跑。慢跑。
+42|B|想要加強自己的肌力，利用啞鈴是不錯的方法，應該如何選擇啞鈴的重量呢？想要加強自己的肌力，利用啞鈴是不錯的方法，應該如何選擇啞鈴的重量呢？|選擇最重的重量選擇最重的重量|選擇適合自己的選擇適合自己的 重量重量|選擇最輕的重量選擇最輕的重量|不管如何只要選擇不管如何只要選擇10公斤的重量即可。公斤的重量即可。
+43|D|下列關於有著良好的肌力與肌耐力的敘述，何者正確？下列關於有著良好的肌力與肌耐力的敘述，何者正確？|可以降低運動傷害發生的機率可以降低運動傷害發生的機率|對於粗重的工作，較不易顯對於粗重的工作，較不易顯 現肌肉疲勞現肌肉疲勞|能擁有較勻稱的身材能擁有較勻稱的身材|以上皆是。以上皆是。
+44|C|瞬發力又稱為瞬發力又稱為|彈跳力彈跳力|肌耐力肌耐力|爆發力爆發力|衝刺力。衝刺力。
+45|C|體適能測驗中，常用仰臥捲腹來檢測哪一部位的肌耐力？體適能測驗中，常用仰臥捲腹來檢測哪一部位的肌耐力？|胸部肌群胸部肌群|腿部肌群腿部肌群|腹部肌群腹部肌群|背部肌群。背部肌群。
+46|A|進行肌力與肌耐力訓練時，不能閉氣，因為閉氣用力時容易造成哪裡內壓上升，導致暈眩現象？進行肌力與肌耐力訓練時，不能閉氣，因為閉氣用力時容易造成哪裡內壓上升，導致暈眩現象？|胸腹腔胸腹腔|鼻腔鼻腔|口腔口腔|以上皆是。以上皆是。
+47|A|我可以用何種動作來測量瞬發力呢？我可以用何種動作來測量瞬發力呢？|立定跳遠立定跳遠|仰臥捲腹仰臥捲腹|坐姿體前彎坐姿體前彎|跑跑1600公尺。公尺。
+48|B|如何改善自身的柔軟度呢？如何改善自身的柔軟度呢？|多做仰臥起坐多做仰臥起坐|利用靜態或動態的伸展操利用靜態或動態的伸展操|多做伏地多做伏地挺身挺身|常常跑步。常常跑步。
+49|B|為增加柔軟度做伸展操時，每一單一動作的伸展時間需要持續多久呢？為增加柔軟度做伸展操時，每一單一動作的伸展時間需要持續多久呢？|0～～10|10～～30|30～～40|40～～50 秒。秒。
+50|A|若想加強自己的柔軟度，能靠伸展操來加強，必須要若想加強自己的柔軟度，能靠伸展操來加強，必須要|1天天/次次|3天天/次次|5天天/一次一次|一星期做一次以上。一星期做一次以上。
+51|C|以下何者為檢測心肺耐力的方法？以下何者為檢測心肺耐力的方法？|仰臥捲腹仰臥捲腹|坐姿體前彎坐姿體前彎|800、、1600公尺跑走公尺跑走|立定跳遠。立定跳遠。
+52|B|下列哪一項不屬於健康體適能的要素？下列哪一項不屬於健康體適能的要素？|肌力肌力|速度速度|心肺耐力心肺耐力|柔軟度。柔軟度。
+53|D|下列哪一項是競技體適能的要素？下列哪一項是競技體適能的要素？|敏捷性敏捷性|速度速度|協調反應協調反應|以上皆是。以上皆是。
+54|D|有下列何種情形時，不宜隨意從事體適能檢測？有下列何種情形時，不宜隨意從事體適能檢測？|有心臟病有心臟病|集會時會暈倒集會時會暈倒|上個月突然一次胸痛之後，就沒上個月突然一次胸痛之後，就沒 再胸痛過再胸痛過|以上皆是。以上皆是。
+55|A|瞬發力是兼具下列哪兩種的表現？瞬發力是兼具下列哪兩種的表現？|力量與速度力量與速度|耐力與速度耐力與速度|肌力與耐力肌力與耐力|速度與重力。速度與重力。
+56|C|在哪個時間訓練柔軟度是最有效的？在哪個時間訓練柔軟度是最有效的？|吃飽飯吃飽飯|洗澡之洗澡之前前|熱身後熱身後|隨時隨地都可以。隨時隨地都可以。
+57|A|下列關於身體質量指數的敘述，何者錯誤？下列關於身體質量指數的敘述，何者錯誤？|簡稱簡稱BIM|是以身高及體重來計算是以身高及體重來計算|評估個人之身體組成的簡易評估個人之身體組成的簡易 方法方法|是健康體適能的項目之一。是健康體適能的項目之一。
+58|A|靜態伸展時，伸展部位要有怎樣的感覺才是正確的？靜態伸展時，伸展部位要有怎樣的感覺才是正確的？|緊繃的感覺緊繃的感覺|劇痛的感覺劇痛的感覺|不會有感覺不會有感覺|以上皆可。以上皆可。
+59|A|下列關於棒球與慢速壘球的敘述，何者錯誤？下列關於棒球與慢速壘球的敘述，何者錯誤？|上場守備人數皆為上場守備人數皆為9人人|將一局分為上下半局將一局分為上下半局|每半局的出局數每半局的出局數 為為3人人|棒球比壘球小顆棒球比壘球小顆。。
+60|C|請問棒球與慢速壘球的本壘板為幾邊形？請問棒球與慢速壘球的本壘板為幾邊形？|三角形三角形|四邊形四邊形|五邊形五邊形|六邊形。六邊形。
+61|A|趴在游泳池邊練習打腿時，理想的位置是將身體何處對準池岸邊緣？趴在游泳池邊練習打腿時，理想的位置是將身體何處對準池岸邊緣？|肚臍肚臍|下腹下腹|胸骨下緣胸骨下緣|大腿。大腿。
+62|A|目前臺灣田徑目前臺灣田徑100公尺短距離項目的紀錄保持者為公尺短距離項目的紀錄保持者為?|楊俊瀚楊俊瀚|陽岱鋼陽岱鋼|楊傳廣楊傳廣|楊興治。楊興治。
+63|A|下列關於游泳池的安全維護敘述，何者正確？下列關於游泳池的安全維護敘述，何者正確？|嚴禁跳水，以免發生危險嚴禁跳水，以免發生危險|可以在水中嬉鬧可以在水中嬉鬧|因為水很淺，所以因為水很淺，所以沒沒有救生員在也能下水有救生員在也能下水|雖然不會游泳，但有救生員在旁，所以可以直接跳入水中玩水。雖然不會游泳，但有救生員在旁，所以可以直接跳入水中玩水。
+64|A|下列何者不是現代奧運會水上比賽運動項目？下列何者不是現代奧運會水上比賽運動項目？|潛水潛水|水上芭蕾水上芭蕾|跳水跳水|水球。水球。
+65|D|下列何者是捷泳的打腿功能？下列何者是捷泳的打腿功能？|前進前進|平衡平衡|持續漂浮前進持續漂浮前進|以上皆是。以上皆是。
+66|B|在捷泳打腿的動作要領中，打腿的方式是在捷泳打腿的動作要領中，打腿的方式是|單純小腿打水單純小腿打水|以大腿帶動小腿以大腿帶動小腿|以小腿帶動大腿以小腿帶動大腿|以上皆是。以上皆是。
+67|C|下列敘述何者正確？下列敘述何者正確？|游泳時不用特別注意其他事情，可直接下水|因為游泳池會循環過濾並消毒，所以可以在游泳池中小便|下水前必須要將身體沖洗乾淨|換好泳裝直接跳入水中。
+68|B|身體在水中所承受的浮力等於所排開的水的重量，是由哪一位科學家所發現的？身體在水中所承受的浮力等於所排開的水的重量，是由哪一位科學家所發現的？|曾文鼎曾文鼎|阿基米得阿基米得|李昌鈺李昌鈺|水行俠。水行俠。
+69|D|下列何種行為不適合在游泳池從事？下列何種行為不適合在游泳池從事？|跳水跳水|奔跑奔跑|喧譁喧譁|以上皆不適合。以上皆不適合。
+70|A|游泳最可以加強健康體適能中的哪一項能力？游泳最可以加強健康體適能中的哪一項能力？|心肺耐力心肺耐力|肌力肌力|柔軟度柔軟度|彈跳力。彈跳力。
+71|B|下列關於游泳耳朵進水時的處理方式，何者為非？下列關於游泳耳朵進水時的處理方式，何者為非？|側著頭以單腳跳躍方式讓水流出側著頭以單腳跳躍方式讓水流出|自己用棉花棒深入耳中處理自己用棉花棒深入耳中處理|尋求耳鼻喉科醫師協助尋求耳鼻喉科醫師協助|切勿自行亂挖。切勿自行亂挖。
+72|A|進入游泳池下水練習前，下列哪個不是應注意的事項？進入游泳池下水練習前，下列哪個不是應注意的事項？|注意水壓及注意水壓及SPA按摩設備等資訊按摩設備等資訊|充分暖身後再淋浴下水充分暖身後再淋浴下水|不在池邊奔跑嬉戲不在池邊奔跑嬉戲|由扶梯緩緩入水。由扶梯緩緩入水。
+73|C|馬拉松全程距離是指多少公里？馬拉松全程距離是指多少公里？|23.195|24.150|42.195|43.198 公里。公里。
+74|D|接力賽跑的接力賽跑的合法接力區域為幾公尺內？合法接力區域為幾公尺內？|5公尺公尺|10公尺公尺|15公尺公尺|30公尺。公尺。
+75|B|田徑規則規定田徑規則規定400公尺及公尺及400公尺以下的短跑，選手必須以何種方式起跑？公尺以下的短跑，選手必須以何種方式起跑？|站立式站立式|蹲踞式蹲踞式|蹲伏式蹲伏式|挺腰式。挺腰式。
+76|D|從事慢跑運動前，身體需先充分伸展以下哪部位？從事慢跑運動前，身體需先充分伸展以下哪部位？|足踝足踝|髖關節髖關節|膝膝|以上皆是。以上皆是。
+77|D|跑步衝刺壓線為近終點時的技術，下列何者敘述正確？跑步衝刺壓線為近終點時的技術，下列何者敘述正確？|盡可能將雙手前伸盡可能將雙手前伸|身體後仰身體後仰|以頭壓線以頭壓線|以胸口以胸口 壓線。壓線。
+78|B|田徑運動中的團體競賽項目是指|馬松拉賽跑馬松拉賽跑|接力賽跑接力賽跑|100公尺賽跑公尺賽跑|200公尺賽跑。公尺賽跑。
+79|D|田徑運動除田賽、徑賽與混合項目外，還包含田徑運動除田賽、徑賽與混合項目外，還包含|路跑路跑|競走競走|越野賽跑越野賽跑|以上皆是。以上皆是。
+80|D|田徑比賽起跑時，必須聽到「鳴槍」之後才可以起跑，如果還沒鳴槍就起跑是為田徑比賽起跑時，必須聽到「鳴槍」之後才可以起跑，如果還沒鳴槍就起跑是為|犯規並應記錄犯規者犯規次數犯規並應記錄犯規者犯規次數|重新起跑即可重新起跑即可|裁判口頭警告即可裁判口頭警告即可|不論是誰應馬上取消比賽資格。不論是誰應馬上取消比賽資格。
+81|C|跑步時雙手的擺動應以跑步時雙手的擺動應以|手腕手腕|手肘手肘|肩膀肩膀|胸部胸部 為支點，直接做慣性的擺動。為支點，直接做慣性的擺動。
+82|B|在彎道上快跑時，將身體向內傾斜，主要是要抵抗何種力？在彎道上快跑時，將身體向內傾斜，主要是要抵抗何種力？|向心力向心力|離心力離心力|合力合力|瞬發力。瞬發力。
+83|C|鐵人三項結合三種運動項目，下列何者為非？鐵人三項結合三種運動項目，下列何者為非？|游泳游泳|自行車自行車|舉重舉重|跑步。跑步。
+84|B|桌球正式比賽時，一局的比數為幾分？桌球正式比賽時，一局的比數為幾分？|10分分|11分分|12分分|15分。分。
+85|B|2025 年9月9日，體育署走入歷史，升格為下列哪一單位？|體育部|運動部|體育委員會|以上皆非。
+86|D|我國創立運動部，首任部長為下列何者？|林郁婷|郭婞淳|王齊麟|李洋。
+87|C|國民體育法第6條規定:為鼓勵國民參與體育活動，明定每年9月幾日為國民體育日？|7日|8日|9日|10日
+88|D|2026 年世界盃足球賽舉辦地點為?|美國|墨西哥|加拿大|美、墨、加三國聯合舉辦。
+89|C|2028 年奧運舉辦地點為?|法國巴黎|日本東京|美國洛杉磯|以上皆非。
+90|C|中華職棒好手林智勝於2025年9月7日引退，其中職生涯累積全壘打數量為聯盟第1，數量為？|303|304|305|306
+91|D|台灣棒球好手人才濟濟，下列哪位台灣優秀棒球選手曾登上美國大聯盟？|王建民|陳偉殷|鄧愷威|以上皆是。
+92|A|台灣第一座以棒球場為主要用途的大巨蛋座落在哪一縣市?|臺北市|新北市|臺中市|高雄市
+93|D|下列何者運動項目在台灣已發展成為職業型態?|排球|棒球|籃球|以上皆是。
+94|C|本校7年級籃球投籃接力比賽每班參賽人數總共幾人|16|18|20|22
+95|C|114 學年本校大隊接力7年級組，每班由幾個棒次合作組成參賽？|16棒|18棒|20棒|22棒。
+96|D|優霸盃女子羽球團體賽，是一項由世界羽球聯盟（BWF）主辦的全球性羽球賽事，在本屆2026年優霸盃決賽中，以3-1擊敗中國女團，繼2010年、2022年後第三度捧盃的哪個國家？|丹麥|中國|日本|韓國
+97|A|湯姆斯盃男子羽球團體賽，亦是一項由世界羽球聯盟（BWF）主辦的全球性羽球賽事，在本屆2026年湯姆斯盃決賽以3-1擊敗首次闖入決賽的法國男隊，第12次奪冠的是哪個國家？|中國|馬來西亞|中華台北|韓國
+98|D|2026 年世界棒球經典賽冠亞軍賽的對戰組合為?|日本VS美國|義大利VS委內瑞拉|多明尼加VS義大利|委內瑞拉VS美國
+99|B|承上題，2026年世界棒球經典賽冠軍隊為哪個國家?|美國|委內瑞拉|日本|多明尼加
+100|A|曾排名世界第一，於114年11月7日在其臉書宣布「高掛球拍退役」，結束球員生涯的台灣羽球選手，為下列何者？|戴資穎|李洋|周天成|王齊麟。
+`;
+
+// 解析資料
+const data = quizDataString.trim().split('\n').map(line => {
+    const parts = line.split('|');
+    return {
+        id: parseInt(parts[0]),
+        ans: parts[1],
+        q: parts[2],
+        options: [
+            { value: 'A', text: parts[3] },
+            { value: 'B', text: parts[4] },
+            { value: 'C', text: parts[5] },
+            { value: 'D', text: parts[6] }
+        ]
+    };
+});
+
+let currentPage = 0;
+const questionsPerPage = 10;
+const totalPages = Math.ceil(data.length / questionsPerPage);
+
+// 儲存狀態的陣列
+let userAnswers = new Array(data.length).fill(null);
+let stageScores = new Array(totalPages).fill(null); // null表示該階段尚未訂正
+
+// 更新下拉選單 UI
+function updateSelectUI() {
+    const select = document.getElementById('stage-select');
+    select.innerHTML = '';
+    
+    for (let i = 0; i < totalPages; i++) {
+        const opt = document.createElement('option');
+        opt.value = i;
+        let text = `階段 ${i + 1}`;
+        if (stageScores[i] !== null) {
+            text += ` (答對: ${stageScores[i]})`;
+        }
+        opt.text = text;
+        if (i === currentPage) {
+            opt.selected = true;
+        }
+        select.appendChild(opt);
+    }
+}
+
+// 更新總分 UI
+function updateTotalScore() {
+    let total = 0;
+    stageScores.forEach(score => {
+        if (score !== null) total += score;
+    });
+    document.getElementById('total-score-display').innerText = total;
+}
+
+// 儲存當前畫面上的答案
+function saveCurrentAnswers() {
+    const start = currentPage * questionsPerPage;
+    const end = Math.min(start + questionsPerPage, data.length);
+    for (let i = start; i < end; i++) {
+        const checkedOption = document.querySelector(`input[name="q${i}"]:checked`);
+        if (checkedOption) {
+            userAnswers[i] = checkedOption.value;
+        }
+    }
+}
+
+// 跳轉指定階段
+function jumpToStage(pageIndex) {
+    if (stageScores[currentPage] === null) {
+        saveCurrentAnswers(); // 跳轉前若還未訂正，先儲存進度
+    }
+    currentPage = parseInt(pageIndex);
+    renderPage();
+}
+
+// 渲染當前頁面
+function renderPage() {
+    updateSelectUI();
+    updateTotalScore();
+
+    const container = document.getElementById('quiz-container');
+    container.innerHTML = '';
+    
+    const start = currentPage * questionsPerPage;
+    const end = Math.min(start + questionsPerPage, data.length);
+    const isSubmitted = stageScores[currentPage] !== null;
+
+    for (let i = start; i < end; i++) {
+        const item = data[i];
+        const div = document.createElement('div');
+        div.className = 'bg-gray-50 p-4 md:p-6 rounded-lg border border-gray-200 mb-6 transition-all shadow-sm';
+        div.id = `q${i}`;
+
+        let optionsHtml = '';
+        item.options.forEach(opt => {
+            const isChecked = userAnswers[i] === opt.value ? 'checked' : '';
+            let labelClass = 'option-label block mt-4 p-4 md:p-5 bg-white border rounded-xl flex items-center text-lg md:text-xl';
+            let inputDisabled = isSubmitted ? 'disabled' : '';
+
+            // 判斷是否已經提交訂正，決定要套用的樣式
+            if (!isSubmitted) {
+                labelClass += ' cursor-pointer hover:bg-blue-50 transition-colors';
+            } else {
+                if (opt.value === item.ans) {
+                    labelClass += ' correct-ans';
+                } else if (isChecked) {
+                    labelClass += ' wrong-ans';
+                }
+            }
+
+            optionsHtml += `
+                <label class="${labelClass}">
+                    <input type="radio" name="q${i}" value="${opt.value}" ${isChecked} ${inputDisabled} 
+                        class="mr-4 ml-2 accent-blue-600 cursor-pointer" onchange="saveCurrentAnswers()">
+                    <span class="text-gray-700 font-medium">( ${opt.value} ) ${opt.text}</span>
+                </label>
+            `;
+        });
+
+        div.innerHTML = `
+            <div class="font-bold text-xl md:text-2xl text-gray-800 mb-5 leading-normal">
+                <span class="bg-blue-600 text-white text-base md:text-lg font-bold mr-3 px-3 py-1 rounded shadow-sm">第 ${item.id} 題</span>
+                ${item.q}
+            </div>
+            <div class="space-y-3">
+                ${optionsHtml}
+            </div>
+        `;
+        container.appendChild(div);
+    }
+    
+    // 按鈕顯示邏輯
+    if (isSubmitted) {
+        document.getElementById('submit-btn').style.display = 'none';
+        document.getElementById('next-btn').style.display = 'block';
+        if (currentPage < totalPages - 1) {
+            document.getElementById('next-btn').innerText = '下一階段';
+        } else {
+            document.getElementById('next-btn').innerText = '測驗結束，查看總分';
+        }
+    } else {
+        document.getElementById('submit-btn').style.display = 'block';
+        document.getElementById('next-btn').style.display = 'none';
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// 訂正答案
+function checkAnswers() {
+    saveCurrentAnswers(); // 確保最新的選擇都有儲存
+    const start = currentPage * questionsPerPage;
+    const end = Math.min(start + questionsPerPage, data.length);
+    let correctCount = 0;
+
+    // 計算答對題數
+    for (let i = start; i < end; i++) {
+        if (userAnswers[i] === data[i].ans) {
+            correctCount++;
+        }
+    }
+
+    // 儲存此階段分數，並重新渲染頁面以套用高光
+    stageScores[currentPage] = correctCount;
+    renderPage();
+}
+
+// 進入下一階段
+function nextStage() {
+    if (currentPage < totalPages - 1) {
+        currentPage++;
+        renderPage();
+    } else {
+        alert('恭喜您已完成所有測驗！目前總分為：' + document.getElementById('total-score-display').innerText + ' 分');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
+// 初始啟動
+window.onload = renderPage;
+</script>
+
+</body>
+</html>
